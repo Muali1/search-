@@ -23,6 +23,24 @@ export class AmadeusService implements OnModuleInit {
         this.clientSecret = this.settings.client_secret ?? null;
         this.baseUrl = this.settings.base_url ?? 'https://test.travel.api.amadeus.com';
     }
+    async getLogoByIata(iataCode: string): Promise<string> {
+        const cacheKey = `airline_logo_${iataCode}`;
+
+        try {
+            const cached = await this.cache.get<string>(cacheKey);
+            if (cached) return cached;
+        } catch { }
+
+        const airline = await this.ps.airlines.findFirst({
+            where: { iata_code: iataCode },
+            select: { logo_url: true },
+        });
+
+        const logo = airline?.logo_url ?? 'frontend/assets/images/flight-img/AA.svg';
+        await this.cache.set(cacheKey, logo, 3600 * 1000);
+
+        return logo;
+    }
     async authenticate() {
         const amadeus_access_token = await this.cache.get('amadeus_access_token')
         if (amadeus_access_token) {

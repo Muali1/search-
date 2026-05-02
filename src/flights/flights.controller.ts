@@ -10,22 +10,26 @@ export class FlightsController {
     async flightOffersSearch(@Body() flight: SearchFlightOffersDto) {
         try {
             const result = await this.fs.search(flight);
-            const response = {
-                'success' : result['success'],
-                'message' : result['message'] ?? null,
+            const response: any = {
+                success: result['success'],
+                message: result['message'] ?? null,
+            };
+
+            if (result['data']) {
+                response['data'] = result['data'];
             }
-        
-            if(result['data'] !== undefined && result['data'] !== null){
-                response['data'] =result['data'];
+
+            if (!result['success']) {
+                throw new HttpException(response, result['status'] ?? 503);
             }
             return response;
-        // الكود
-    } catch (e) {
-        throw new HttpException(
-            { success: false, message: e.message ?? 'Something went wrong' },
-            500
-        );
+        } catch (e) {
+            if (e instanceof HttpException) throw e;
+            throw new HttpException(
+                { success: false, message: e.message ?? 'Something went wrong' },
+                500
+            );
+        }
     }
-    }
-    
+
 }

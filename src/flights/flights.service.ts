@@ -3,7 +3,7 @@ import { AmadeusService } from 'src/amadeus/amadeus.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
-
+import { transformFlightOffer } from './flights-offers.resource';
 dayjs.extend(customParseFormat);
 @Injectable()
 export class FlightsService {
@@ -77,7 +77,22 @@ export class FlightsService {
                 success: true,
                 status: 200,
                 data: {
-                    offers: offersData,
+                    offers:  await Promise.all(
+                        offersData.map(async (offer, index) => {
+                            const logos: Record<string, string> = {};
+
+                            for (const itinerary of offer['itineraries'] ?? []) {
+                                for (const segment of itinerary['segments'] ?? []) {
+                                    const carrier = segment['carrierCode'];
+                                    if (carrier && !logos[carrier]) {
+                                        logos[carrier] = await this.amadeusService.getLogoByIata(carrier);
+                                    }
+                                }
+                            }
+
+                            return transformFlightOffer(offer, prices[index], logos);
+                        })
+                    ),
                     dictionaries: offers['dictionaries'] ?? [],
                     meta: {
                         min_price: Math.min(...prices),
