@@ -47,7 +47,11 @@ export class AmadeusService implements OnModuleInit {
     async searchFlightOffers(data: any, access_token) {
         access_token = access_token ?? await this.authenticate();
         const payload: any = {};
-
+        // if (auth() -> check()) {
+        //     payload['currencyCode'] = auth() -> user() -> currency -> code ?? 'SAR';
+        // } else {
+        //     payload['currencyCode'] = session('currency') ?? 'SAR';
+        // }
         const type = data['type'] ?? 'oneway';
         const travelClass = data['travelClass'] ?? 'ECONOMY';
 
