@@ -103,6 +103,14 @@ export class FlightsService {
         }
 
     }
+    async seatMap(encodedOffer: string) {
+        const accessToken = await this.amadeusService.authenticate();
+        return this.amadeusService.FlightOfferSeatMap(encodedOffer, accessToken);
+
+    }
+    async getToken() {
+    return this.amadeusService.authenticate();
+}
 }
 
 

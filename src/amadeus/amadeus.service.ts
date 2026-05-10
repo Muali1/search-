@@ -66,7 +66,6 @@ export class AmadeusService implements OnModuleInit {
             const destination_airport = await this.ps.airports.findFirst({ where: { id: destinationCityId }, select: { iata_code: true } });
             const destination_iata = destination_airport?.iata_code;
 
-            // dd($origin , $destination);
             if (!origin_iata || !destination_iata) {
                 throw new BadRequestException('Invalid origin or destination city.');
             }
@@ -151,27 +150,14 @@ export class AmadeusService implements OnModuleInit {
         const travelers: any[] = [];
         const passengers = data['passengers'] ?? 'Adults=1, Children=0, Infants=0, Total=1';
         const cleaned = passengers.replace(/,\s*/g, '&');
-        // parse_str(str_replace([', ', ',', '='], ['&', '&', '='], passengers), $parsedPassengers);
         const parsedPassengers = new URLSearchParams(cleaned);
-
 
         const adults = parseInt(parsedPassengers.get('Adults') ?? '1');
         const children = parseInt(parsedPassengers.get('Children') ?? '0');
         const infants = parseInt(parsedPassengers.get('Infants') ?? '0');
 
         let traveler_id = 1;
-        // const adult_ids = [];
         const adult_ids: string[] = [];
-
-        // for ( $i = 0; $i < $adults; $i++) {
-        //     id = (string) $traveler_id++;
-        //     $adult_ids[] = $id;
-        //     $travelers[] = [
-        //         'id' => $id,
-        //         'travelerType' => 'ADULT',
-        //         'fareOptions' => ['STANDARD'],
-        //     ];
-        // }
         for (let i = 0; i < adults; i++) {
             const id = String(traveler_id++);
             adult_ids.push(id);
@@ -230,7 +216,6 @@ export class AmadeusService implements OnModuleInit {
         }
 
         // max flight offers
-
         // ========== SEND REQUEST ==========
         const response = await firstValueFrom(this.httpService.post(
             `${this.baseUrl}/v2/shopping/flight-offers`,
@@ -256,5 +241,40 @@ export class AmadeusService implements OnModuleInit {
         return response.data;
 
     }
+    async FlightOfferSeatMap(encodedOffer: string, access_token) {
+        let requestBody;
+        const decoded_offer = Buffer.from(encodedOffer, 'base64').toString('utf-8');
+        const offer = JSON.parse(decoded_offer);
+        if (offer.data) {
+            requestBody = offer;
+        } else {
+            requestBody = { data: [offer] };
+        }
+        console.log('requestBody:', JSON.stringify(requestBody, null, 2));
+        const response = await firstValueFrom(
+            this.httpService.post(
+                `${this.baseUrl}/v1/shopping/seatmaps`,
+                requestBody,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${access_token}`,
+                    },
+                }
+            ).pipe(
+                catchError((error) => {
+                    const amadeus_errors = error.response?.data?.errors ?? [];
+                    return throwError(() => ({
+                        error: true,
+                        status: error.response?.status ?? 500,
+                        messages: amadeus_errors.map(e => e.detail ?? e.title),
+                    }));
+                })
+            )
+        );
+
+        return response.data;
+    }
+
 }
 
