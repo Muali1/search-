@@ -44,9 +44,10 @@ export class AmadeusService implements OnModuleInit {
         this.cache.set('amadeus_access_token', token, 29 * 60 * 1000);
         return token;
     }
-    async searchFlightOffers(data: any, access_token) {
+    async searchFlightOffers(data: any, access_token, dictionaries?: any) {
         access_token = access_token ?? await this.authenticate();
         const payload: any = {};
+        payload['currencyCode'] = 'SAR';
         // if (auth() -> check()) {
         //     payload['currencyCode'] = auth() -> user() -> currency -> code ?? 'SAR';
         // } else {
@@ -241,40 +242,138 @@ export class AmadeusService implements OnModuleInit {
         return response.data;
 
     }
-    async FlightOfferSeatMap(encodedOffer: string, access_token) {
-        let requestBody;
-        const decoded_offer = Buffer.from(encodedOffer, 'base64').toString('utf-8');
-        const offer = JSON.parse(decoded_offer);
-        if (offer.data) {
-            requestBody = offer;
-        } else {
-            requestBody = { data: [offer] };
-        }
-        console.log('requestBody:', JSON.stringify(requestBody, null, 2));
-        const response = await firstValueFrom(
-            this.httpService.post(
-                `${this.baseUrl}/v1/shopping/seatmaps`,
-                requestBody,
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${access_token}`,
-                    },
+    async selectFlightOffer(offer: any, access_token?: string, dictionaries?: any) {
+        const token = access_token ?? await this.authenticate();
+
+        // call pricing
+        const priced = await this.getPricedOffer('v2', offer, token, dictionaries);
+        const upsale = await this.flightOfferUpsale('v2', offer, token);
+
+        const pricedOffer = priced?.data?.flightOffers?.[0] ?? null;
+
+        let baseFare = 0;
+        let taxes = 0;
+        let currency = 'SAR';
+
+        if (pricedOffer) {
+            for (const tp of pricedOffer.travelerPricings ?? []) {
+                baseFare += Number(tp.price?.base ?? 0);
+
+                for (const tax of tp.price?.taxes ?? []) {
+                    taxes += Number(tax.amount ?? 0);
                 }
-            ).pipe(
-                catchError((error) => {
-                    const amadeus_errors = error.response?.data?.errors ?? [];
-                    return throwError(() => ({
-                        error: true,
-                        status: error.response?.status ?? 500,
-                        messages: amadeus_errors.map(e => e.detail ?? e.title),
-                    }));
-                })
-            )
-        );
 
-        return response.data;
+                currency = tp.price?.currency ?? currency;
+            }
+        }
+
+        const itineraries = offer?.itineraries ?? [];
+
+        const firstSegment = itineraries?.[0]?.segments?.[0];
+        const lastSegment = itineraries?.at(-1)?.segments?.at(-1);
+
+        return {
+            offer,
+            pricedOffer: priced?.data ?? null,
+            fareUpsale: upsale?.data ?? null,
+
+            baseFare,
+            taxes,
+            total: baseFare + taxes,
+            currency,
+
+            departureCity: firstSegment?.departure?.iataCode ?? null,
+            arrivalCity: lastSegment?.arrival?.iataCode ?? null,
+        };
     }
+    async getPricedOffer(version: string, offer: any, access_token?: string, dictionaries?: any) {
+        {
+            try {
+                const token = access_token ?? await this.authenticate();
+                const body: any = {
+                    data: {
+                        type: 'flight-offers-pricing',
+                        flightOffers: [offer],
+                    },
+                };
 
-}
+                // include dictionaries if available
+                if (dictionaries) {
+                    body.data['dictionaries'] = dictionaries;
+                }
+                const response = await firstValueFrom(
+                    this.httpService.post(
+                        `${this.baseUrl}/v1/shopping/flight-offers/pricing?include=other-services,bags`,
+                        body,
+                        {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`,
+                            },
+                        },
+                    ),
+                );
+
+                return response.data;
+
+            } catch (e) {
+                console.log('Pricing error:', JSON.stringify(e.response?.data, null, 2));
+                throw new BadRequestException(e.response?.data ?? 'Pricing failed');
+            }
+        }
+    }
+    async flightOfferUpsale(
+            version: string,
+            offer: any,
+            access_token ?: string,
+        ) {
+            const token = access_token ?? await this.authenticate();
+
+            const response = await firstValueFrom(
+                this.httpService.post(
+                    `${this.baseUrl}/v1/shopping/flight-offers/upselling`,
+                    {
+                        data: {
+                            type: 'flight-offers-upselling',
+                            flightOffers: [offer],
+                        },
+                    },
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                    },
+                ),
+            );
+
+            return response.data;
+        }
+    async flightOfferSeatMap(
+            offer: any,
+            access_token ?: string,
+        ) {
+            const token = access_token ?? await this.authenticate();
+
+            const requestBody = offer?.data
+                ? offer
+                : { data: [offer] };
+
+            const response = await firstValueFrom(
+                this.httpService.post(
+                    `${this.baseUrl}/v1/shopping/seatmaps`,
+                    requestBody,
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                        timeout: 6000,
+                    },
+                ),
+            );
+
+            return response.data;
+        }
+    }
 

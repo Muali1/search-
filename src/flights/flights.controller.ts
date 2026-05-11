@@ -1,14 +1,14 @@
-import { Controller, Post, Body ,Get } from '@nestjs/common';
+import { Controller, Post, Body, UseInterceptors } from '@nestjs/common';
 import { FlightsService } from './flights.service';
 import { SearchFlightOffersDto } from './dto/flights.dto';
 import { HttpException } from '@nestjs/common';
-import { FlightSeatMapDto } from 'src/flights/dto/seat-map.dto';
+import { FlightSeatMapDto, PriceOfferDto } from 'src/flights/dto/seat-map.dto';
 @Controller('flights')
 export class FlightsController {
     constructor(private fs: FlightsService) { }
 
     @Post('searchflightsoffers')
-    async flightOffersSearch(@Body() flight: SearchFlightOffersDto) {
+    async searchflightsoffers(@Body() flight: SearchFlightOffersDto) {
         try {
             const result = await this.fs.search(flight);
             const response = {
@@ -28,20 +28,39 @@ export class FlightsController {
             );
         }
     }
-    @Post('seatmap')
-    async flightSeatMap(@Body() body: FlightSeatMapDto) {
+    @Post('selectflightsoffers')
+    async selectflightsoffers(@Body() body: any) {
         try {
-            const result = await this.fs.seatMap(body.offer);
-            return { success: true, data: result };
+            return await this.fs.select(body.offer);
         } catch (e) {
             throw new HttpException(
-                { success: false, message: e.message ?? 'Something went wrong', detail: e },
+                { success: false, message: e.message },
                 500
             );
         }
     }
-@Get('token')
-async getToken() {
-    return { token: await this.fs.getToken() };
-}
+    @Post('seatmap')
+    async seatmap(@Body() body: any) {
+        try {
+            const result = await this.fs.seatMap(body.offer);
+
+            return {
+                success: true,
+                data: result,
+            };
+        } catch (e) {
+            throw new HttpException(
+                {
+                    success: false,
+                    message: e.message ?? 'Something went wrong',
+                },
+                500,
+            );
+        }
+    }
+
+    // @Get('token')
+    // async getToken() {
+    //     return { token: await this.fs.getToken() };
+    // }
 }

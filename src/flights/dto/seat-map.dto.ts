@@ -1,6 +1,14 @@
 import { IsNotEmpty, IsString } from 'class-validator';
+
 export class FlightSeatMapDto {
-    @IsString()
+    // @IsString()
     @IsNotEmpty()
     offer: string;
 }
+
+export class PriceOfferDto {
+    // @IsString()
+    @IsNotEmpty()
+    offer: string;
+}
+

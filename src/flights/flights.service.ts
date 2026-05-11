@@ -3,14 +3,14 @@ import { AmadeusService } from 'src/amadeus/amadeus.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
-
+import { OfferCodecService } from './OfferCodec/offercodec.service';
 dayjs.extend(customParseFormat);
 @Injectable()
 export class FlightsService {
     protected tamara_installments_count = 4;
     protected tamara_logo = 'frontend/assets/images/tamara.svg';
     protected tamara_label = 'interest-free payments';
-    constructor(private amadeusService: AmadeusService, private ps: PrismaService) {
+    constructor(private amadeusService: AmadeusService, private ps: PrismaService, private offerCodecService: OfferCodecService) {
     }
     async markup_rate(price) {
         const res = await this.ps.flights_service_providers.findFirst({
@@ -72,12 +72,20 @@ export class FlightsService {
                 where: { name: 'amadeus' },
                 select: { cashback_enabled: true, cashback_points: true }
             });
+            const dictionaries = offers['dictionaries'] ?? {};
 
+            const formattedOffers = offersData.map((offer) => ({
+                ...offer,
+                encoded: this.offerCodecService.encode({
+                    offer,
+                    dictionaries, // ← include dictionaries
+                }),
+            }));
             return {
                 success: true,
                 status: 200,
                 data: {
-                    offers: offersData,
+                    offers: formattedOffers,
                     dictionaries: offers['dictionaries'] ?? [],
                     meta: {
                         min_price: Math.min(...prices),
@@ -103,14 +111,64 @@ export class FlightsService {
         }
 
     }
+    async select(offerEncoded: string) {
+        const accessToken = await this.amadeusService.authenticate();
+
+        const decoded = this.offerCodecService.decode(offerEncoded);
+            const offer = decoded?.offer ?? decoded;
+            const dictionaries = decoded?.dictionaries ?? null;
+        console.log(JSON.stringify(offer, null, 2));
+        const result = await this.amadeusService.selectFlightOffer(
+            offer,
+            dictionaries
+        );
+
+        return {
+            success: true,
+            data: result,
+        };
+    }
     async seatMap(encodedOffer: string) {
         const accessToken = await this.amadeusService.authenticate();
-        return this.amadeusService.FlightOfferSeatMap(encodedOffer, accessToken);
 
+        const offer = this.offerCodecService.decode(encodedOffer);
+
+        const seatmap = await this.amadeusService.flightOfferSeatMap(
+            offer,
+            accessToken,
+        );
+
+        return seatmap;
     }
-    async getToken() {
-    return this.amadeusService.authenticate();
-}
+    // async priceOffer(encodedOffer: string) {
+    //     const accessToken = await this.amadeusService.authenticate();
+
+    //     const offer = this.offerCodecService.decode(encodedOffer);
+
+    //     const pricedOffer = await this.amadeusService.getPricedOffer(
+    //         'v2',
+    //         offer,
+    //         accessToken,
+    //     );
+
+    //     return pricedOffer;
+    // }
+    // async upsale(encodedOffer: string) {
+    //     const accessToken = await this.amadeusService.authenticate();
+
+    //     const offer = this.codec.decode(encodedOffer);
+
+    //     const upsale = await this.amadeusService.flightOfferUpsale(
+    //         'v2',
+    //         offer,
+    //         accessToken,
+    //     );
+
+    //     return upsale;
+    // }
+    // async getToken() {
+    //     return this.amadeusService.authenticate();
+    // }
 }
 
 
